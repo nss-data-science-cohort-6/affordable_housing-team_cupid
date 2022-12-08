@@ -1,0 +1,51 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+library(sf)
+library(leaflet)
+library(htmltools)
+library(scales)
+
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(tibble)
+```
+
+```{r}
+filtered_sales <- read_csv('./data/filtered_sales.csv')
+LIHTC <- read_csv('./data/LIHTC.csv')
+property_details <- read_csv('./data/property_details.csv')
+barnes <- read_csv('./data/barnes.csv')
+#assessments <- read_csv('./data/barnes.csv')
+```
+
+```{r}
+#head(property_details)
+str(property_details)
+
+property_details$latlong <- stringr::str_extract(string = property_details$centroid,
+                                               pattern = "(?<=\\().*(?=\\))")
+head(property_details)
+str(property_details)
+```
+```{r}
+library(stringr)
+property_details[c('long', 'lat')] <- str_split_fixed(property_details$latlong,
+                                                      ',', 2)
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
