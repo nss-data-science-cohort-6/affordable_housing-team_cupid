@@ -1,0 +1,68 @@
+---
+title: "TLC_Branch"
+output: html_document
+date: "2022-12-06"
+---
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(sf)
+```
+
+```{r}
+assessments <- read_csv("Data/assessments.csv")
+```
+
+```{r}
+barnes <- read_csv("Data/barnes.csv")
+```
+
+```{r}
+filtered_sales <- read_csv("Data/filtered_sales.csv")
+```
+
+```{r}
+full_sales <- read_csv("Data/full_sales.csv")
+```
+
+```{r}
+LIHTC <- read_csv("Data/LIHTC.csv")
+```
+
+```{r}
+property_details <- read_csv("Data/property_details.csv")
+```
+```{r}
+head(LIHTC)
+```
+
+```{r}
+head(barnes)
+```
+
+```{r}
+head(property_details)
+```
+
+```{r}
+head(filtered_sales)
+```
+
+```{r Join filtered_sales and property_details dataframe and drop duplicates}
+APNJoin <- inner_join(filtered_sales, property_details, by="apn") %>% 
+  distinct(apn,amount,ownerdate, .keep_all = TRUE)
+APNJoin
+```
+
+
+```{r}
+LIHTC_2000 <- LIHTC %>% 
+  filter(YR_PIS >= 2000)
+head(LIHTC_2000)
+```
+
+
