@@ -51,6 +51,14 @@ head(property_details)
 ```{r}
 head(filtered_sales)
 ```
+
+```{r Join filtered_sales and property_details dataframe and drop duplicates}
+APNJoin <- inner_join(filtered_sales, property_details, by="apn") %>% 
+  distinct(apn,amount,ownerdate, .keep_all = TRUE)
+APNJoin
+```
+
+
 ```{r}
 LIHTC_2000 <- LIHTC %>% 
   filter(YR_PIS >= 2000)
