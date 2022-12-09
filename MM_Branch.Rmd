@@ -1,0 +1,126 @@
+---
+title: "MM_Branch"
+output: html_document
+date: "2022-11-23"
+---
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(sf)
+library(stringr)
+library(data.table)
+```
+
+
+```{r}
+assessments <- read_csv("Data/assessments.csv")
+```
+
+```{r}
+barnes <- read_csv("Data/barnes.csv")
+```
+
+```{r}
+filtered_sales <- read_csv("Data/filtered_sales.csv")
+```
+
+```{r}
+full_sales <- read_csv("Data/full_sales.csv")
+```
+
+```{r}
+LIHTC <- read_csv("Data/LIHTC_updated.csv")
+```
+
+```{r}
+property_details <- read_csv("Data/property_details.csv")
+```
+```{r}
+head(LIHTC)
+```
+
+```{r}
+head(barnes)
+```
+
+```{r}
+head(property_details)
+```
+
+```{r}
+head(filtered_sales)
+```
+```{r}
+LIHTC_2000 <- LIHTC %>% 
+  filter(YR_PIS >= 2000)
+head(LIHTC_2000)
+```
+
+```{r}
+LIHTC_2000 %>% 
+  filter(YR_PIS != 8888, YR_PIS != 9999)
+```
+
+
+
+```{r}
+head(property_details)
+```
+
+```{r}
+property_details$latlong <- stringr::str_extract(string = property_details$centroid, pattern = "(?<=\\().*(?=\\))")
+property_details[c('long', 'lat')] <- str_split_fixed(property_details$latlong,',', 2)
+
+```
+
+
+```{r}
+pd_sf <- st_as_sf(property_details, coords = c("long", "lat"), crs = 4326)
+```
+
+```{r}
+head(pd_sf)
+```
+
+```{r}
+LIHTC_2000_SF <- st_as_sf(LIHTC_2000, coords = c("LATITUDE", "LONGITUDE"), crs = 4326)
+```
+
+```{r}
+head(LIHTC_2000_SF)
+```
+
+```{r}
+head(barnes)
+```
+
+```{r}
+nearest <- st_nearest_feature(pd_sf, LIHTC_2000_SF)
+```
+
+```{r}
+dist <- st_distance(pd_sf, LIHTC_2000_SF[nearest,], by_element = TRUE) %>%
+    units::set_units(mi)
+
+```
+
+```{r}
+get_nearest <- cbind(pd_sf, st_drop_geometry(LIHTC_2000_SF))
+```
+
+```{r}
+dist
+```
+
+
+```{r}
+get_nearest$dist = dist
+```
+```{r}
+head(get_nearest)
+```
+
