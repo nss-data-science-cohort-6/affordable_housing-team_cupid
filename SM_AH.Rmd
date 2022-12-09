@@ -20,29 +20,118 @@ library(readr)
 library(tibble)
 ```
 
+#### Reading the data files
+#### Note we are using the LITHC updated files where the YR_PIS in the 5th row is changed from 9999 to 2017.
+#### The top five rows YR_PIS has 8888 and 9999 values in LIHTC data set.
+
 ```{r}
 filtered_sales <- read_csv('./data/filtered_sales.csv')
-LIHTC <- read_csv('./data/LIHTC.csv')
+LIHTC <- read_csv('./data/LIHTC_updated.csv')
 property_details <- read_csv('./data/property_details.csv')
 barnes <- read_csv('./data/barnes.csv')
 #assessments <- read_csv('./data/barnes.csv')
 ```
 
 ```{r}
-#head(property_details)
-str(property_details)
+head(property_details) #looking at the head of the property_sales
+str(property_details) #finding the nature of the 
 
 property_details$latlong <- stringr::str_extract(string = property_details$centroid,
                                                pattern = "(?<=\\().*(?=\\))")
-head(property_details)
-str(property_details)
+#head(property_details)
+#str(property_details)
 ```
+
+#### Making the longitude and latitude column from the latlong created from centriod column so that it can be used for sf (simple form) object creation
+`
 ```{r}
 library(stringr)
 property_details[c('long', 'lat')] <- str_split_fixed(property_details$latlong,
                                                       ',', 2)
+
 ```
 
+#### Cleaning the LIHTC file removing the rows with YR_PIS as 8888 and 9999 which have no meaning full YR_PIS.
+#### Also filtering out the development which are commited to service before year 2000
+
+```{r}
+lihtc_2000 <- LIHTC %>%
+  filter(YR_PIS != 8888, YR_PIS != 9999) %>%
+  filter(YR_PIS >= 2000)
+```
+
+#### From 177 rows we are now down to 57 housing developments to compare with the property sales data.
+
+#### We are going to work on merging the property_sales to the filtered_sales.
+#### Filtered sales has some duplicate rows we will drop the duplicates using distinct() function and then do the inner_join to the property sales, to keep all the common rows we will use the 'apn' as the joining column and then we will convert the tibbles to sf objects, to find the distance from housing development.
+
+```{r}
+dropdup_fs <- filtered_sales %>%
+  distinct()
+
+
+
+sale_prop_details <- inner_join(dropdup_fs, property_details, by="apn")
+  
+```
+
+#### Convert the tibble into sf object for distance comparison and finding the nearest housing development to the property.
+
+```{r}
+lihtc_sf = st_as_sf(lihtc_2000, coords = c("LONGITUDE", "LATITUDE"), 
+                 crs = 4326)
+prop_sales_sf = st_as_sf(sale_prop_details, coords = c('long', 'lat'),
+                         crs = 4326)
+
+```
+
+#### Now we have the sf objects we are going to compare the geometry columns across the data sets lihtc_sf and prop_sales_sf to find the nearest housing development and the distance from that to the property.
+
+### We will find the property within 0.5 miles and 1 miles distance.
+
+```{r}
+# Map property  to nearest housing development
+properties_to_AH <- bind_cols(prop_sales_sf %>% st_drop_geometry(), 
+                                lihtc_sf[st_nearest_feature(prop_sales_sf, lihtc_sf), ])
+
+str(properties_to_AH)
+summary(properties_to_AH)
+```
+
+
+```{r} 
+##this is giving zeros
+properties_to_AH %>%
+ 
+    mutate(
+    lead = geometry[row_number() + 1],
+    dist = st_distance(geometry, lead, by_element = T) %>%
+       units::set_units(mi),
+  )
+```
+```{r}
+st_distance(prop_sales_sf$geometry,lihtc_sf$geometry, by_element = T) %>% head()
+```
+
+
+
+```{r eval=FALSE, include=FALSE}
+pd_sf <- st_as_sf(property_details, coords = c("long", "lat"), 
+                 crs = 4326)
+head(pd_sf)
+
+lihtc_sf <- st_as_sf(LIHTC, coords = c("LONGITUDE", "LATITUDE"), CRS = 4326)
+head(lihtc_sf)
+```
+```{r}
+dropdup_fs <- filtered_sales %>%
+  distinct()
+
+%>%
+    units::set_units(mi)
+
+
+```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
 
