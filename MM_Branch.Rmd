@@ -18,109 +18,74 @@ library(data.table)
 
 ```{r}
 assessments <- read_csv("Data/assessments.csv")
-```
-
-```{r}
 barnes <- read_csv("Data/barnes.csv")
-```
-
-```{r}
 filtered_sales <- read_csv("Data/filtered_sales.csv")
-```
-
-```{r}
 full_sales <- read_csv("Data/full_sales.csv")
-```
-
-```{r}
 LIHTC <- read_csv("Data/LIHTC_updated.csv")
-```
-
-```{r}
 property_details <- read_csv("Data/property_details.csv")
 ```
-```{r}
-head(LIHTC)
-```
+#### Filter LIHTC to Developements in service since 2000
+#### Remove invalid years from YR_PIS column
+#### Filter to include only valid columns
 
-```{r}
-head(barnes)
-```
-
-```{r}
-head(property_details)
-```
-
-```{r}
-head(filtered_sales)
-```
 ```{r}
 LIHTC_2000 <- LIHTC %>% 
-  filter(YR_PIS >= 2000)
-head(LIHTC_2000)
-```
-
-```{r}
-LIHTC_2000 %>% 
+  filter(YR_PIS >= 2000) %>% 
   filter(YR_PIS != 8888, YR_PIS != 9999)
+LIHTC_2000_mod <- LIHTC_2000 %>% 
+  select(HUD_ID, PROJECT, YR_PIS, LATITUDE, LONGITUDE)
+
+LIHTC_2000_mod
 ```
+#### Filter Barnes Data to include 5 columns: HUD_ID, YR_PIS, lat, long, Project (name)
+#### Convert YR_PIS to numeric column
+#### Rename Columns to associated LIHTC column names
+```{r}
+barnes$'Affordability Term Start Date' <- str_sub(barnes$'Affordability Term Start Date', start=-4, end=-1) %>%
+  as.numeric()
 
+barnes_mod <- barnes[, c('HUD_ID', 'Development Name', 'Affordability Term Start Date', 'lat', 'lng')]
 
+colnames(barnes_mod) <- c('HUD_ID', 'PROJECT', 'YR_PIS', 'LATITUDE', 'LONGITUDE')
+
+barnes_mod
+```
+#### Join LIHTC_2000 and Barnes Data -- name = "developements"
 
 ```{r}
-head(property_details)
+developments <- rbind(LIHTC_2000_mod, barnes_mod)
 ```
 
+
+#### Separate 'centroid' lat and long values in property_details
+#### Convert property_details to sf
 ```{r}
 property_details$latlong <- stringr::str_extract(string = property_details$centroid, pattern = "(?<=\\().*(?=\\))")
 property_details[c('long', 'lat')] <- str_split_fixed(property_details$latlong,',', 2)
-
-```
-
-
-```{r}
 pd_sf <- st_as_sf(property_details, coords = c("long", "lat"), crs = 4326)
 ```
 
+#### Convert developments into sf 
 ```{r}
-head(pd_sf)
+developments_sf <- st_as_sf(developments, coords = c("LONGITUDE", "LATITUDE"), crs = 4326)
 ```
 
+#### Get Nearest Development to Property -- assign to 'nearest'
+#### Get distance between developement and property -- assign to 'dist'
+#### bind the two together, including only HUD_ID, YR_PIS, Project
+#### add the distance column to get_nearest sf
+#### mutate to convert distance column to a numeric value
 ```{r}
-LIHTC_2000_SF <- st_as_sf(LIHTC_2000, coords = c("LATITUDE", "LONGITUDE"), crs = 4326)
-```
-
-```{r}
-head(LIHTC_2000_SF)
-```
-
-```{r}
-head(barnes)
-```
-
-```{r}
-nearest <- st_nearest_feature(pd_sf, LIHTC_2000_SF)
-```
-
-```{r}
-dist <- st_distance(pd_sf, LIHTC_2000_SF[nearest,], by_element = TRUE) %>%
+nearest <- st_nearest_feature(pd_sf, developments_sf)
+dist <- st_distance(pd_sf, developments_sf[nearest,], by_element = TRUE) %>%
     units::set_units(mi)
-
-```
-
-```{r}
-get_nearest <- cbind(pd_sf, st_drop_geometry(LIHTC_2000_SF))
-```
-
-```{r}
-dist
-```
-
-
-```{r}
+get_nearest <- cbind(pd_sf, st_drop_geometry(developments_sf[nearest, c("HUD_ID", "YR_PIS", "PROJECT")]))
 get_nearest$dist = dist
+get_nearest <- get_nearest %>% 
+  mutate(dist = as.numeric(dist))
 ```
-```{r}
-head(get_nearest)
-```
+
+
+
+
 
