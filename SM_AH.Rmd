@@ -28,8 +28,8 @@ library(tibble)
 filtered_sales <- read_csv('./data/filtered_sales.csv')
 LIHTC <- read_csv('./data/LIHTC_updated.csv')
 property_details <- read_csv('./data/property_details.csv')
-barnes <- read_csv('./data/barnes.csv')
-#assessments <- read_csv('./data/barnes.csv')
+barnes <- read_csv('./data/barnes_fixed.csv')
+assessments <- read_csv('./data/assessments.csv')
 ```
 
 ```{r}
@@ -54,11 +54,41 @@ property_details[c('long', 'lat')] <- str_split_fixed(property_details$latlong,
 #### Cleaning the LIHTC file removing the rows with YR_PIS as 8888 and 9999 which have no meaning full YR_PIS.
 #### Also filtering out the development which are commited to service before year 2000
 
+
 ```{r}
 lihtc_2000 <- LIHTC %>%
-  filter(YR_PIS != 8888, YR_PIS != 9999) %>%
-  filter(YR_PIS >= 2000)
+  filter(YR_PIS >= 2000)%>%
+  filter(YR_PIS != 8888, YR_PIS != 9999)
+lihtc2000_mod <- lihtc_2000[, c('HUD_ID', 'PROJECT', 'YR_PIS','LATITUDE', 'LONGITUDE')] 
+lihtc2000_mod
 ```
+
+#### From 177 rows we are now down to 57 housing developments to compare with the property sales data. Also we created a new data from lihtc2000_mod with just the 5 columns, for merging to barnes and analysis.
+
+#### preparing the barnes data to be merged with the LIHTC so that it can be used for property analysis. (Note: we filled the missing property names in Barnes data using google serach and created the HUDID column in .csv before reading it). 
+#### fix the date format from mm/dd/yyyy to only yyyy and it is a character to make it numeric, change the column names and keep only the five coulms needed to row bind with lihtc2000_mod
+```{r}
+barnes$'Affordability Term Start Date' <- str_sub(barnes$'Affordability Term Start Date', start=-4, end=-1) %>%
+  as.numeric()
+
+str(barnes$`Affordability Term Start Date`)
+
+barnes_mod <- barnes[, c('HUD_ID', 'Development Name', 'Affordability Term Start Date', 'lat', 'lng')]
+
+barnes_mod
+
+# Rename the columns to match the LIHTC
+colnames(barnes_mod) <- c('HUD_ID', 'PROJECT', 'YR_PIS','LATITUDE', 'LONGITUDE')
+barnes_mod
+```
+
+#### barnes data is ready to row bind to the lihtc
+
+```{r}
+developments <- rbind(lihtc2000_mod, barnes_mod)
+developments
+```
+
 
 #### From 177 rows we are now down to 57 housing developments to compare with the property sales data.
 
@@ -69,7 +99,13 @@ lihtc_2000 <- LIHTC %>%
 dropdup_fs <- filtered_sales %>%
   distinct()
 
+sale_prop_details <- inner_join(dropdup_fs, property_details, by="apn")
+```
 
+
+```{r}
+dropdup_fs <- filtered_sales %>%
+  distinct()
 
 sale_prop_details <- inner_join(dropdup_fs, property_details, by="apn")
   
@@ -77,8 +113,9 @@ sale_prop_details <- inner_join(dropdup_fs, property_details, by="apn")
 
 #### Convert the tibble into sf object for distance comparison and finding the nearest housing development to the property.
 
+
 ```{r}
-lihtc_sf = st_as_sf(lihtc_2000, coords = c("LONGITUDE", "LATITUDE"), 
+dev_sf = st_as_sf(developments, coords = c("LONGITUDE", "LATITUDE"), 
                  crs = 4326)
 prop_sales_sf = st_as_sf(sale_prop_details, coords = c('long', 'lat'),
                          crs = 4326)
@@ -89,28 +126,50 @@ prop_sales_sf = st_as_sf(sale_prop_details, coords = c('long', 'lat'),
 
 ### We will find the property within 0.5 miles and 1 miles distance.
 
+
+```{r}
+nearest <- st_nearest_feature(prop_sales_sf, dev_sf)
+nearest
+
+dist <- st_distance(prop_sales_sf, 
+                    dev_sf[nearest,], by_element = TRUE) %>%
+    units::set_units(mi)
+
+```
+
+
 ```{r}
 # Map property  to nearest housing development
 properties_to_AH <- bind_cols(prop_sales_sf %>% st_drop_geometry(), 
-                                lihtc_sf[st_nearest_feature(prop_sales_sf, lihtc_sf), ])
+                                dev_sf[nearest, ])
 
-str(properties_to_AH)
-summary(properties_to_AH)
+#str(properties_to_AH)
+#summary(properties_to_AH)
+```
+
+```{r}
+properties_to_AH$dist = dist
+
+properties_to_AH <- properties_to_AH %>% 
+  mutate(dist = as.numeric(dist))
+#properties_to_AH <- properties_to_AH$dist %>%
+ # as.numeric()
+  #mutate(dist = as.numeric(dist))
 ```
 
 
 ```{r} 
 ##this is giving zeros
-properties_to_AH %>%
- 
-    mutate(
-    lead = geometry[row_number() + 1],
-    dist = st_distance(geometry, lead, by_element = T) %>%
-       units::set_units(mi),
-  )
+# properties_to_AH %>%
+#  
+#     mutate(
+#     lead = geometry[row_number() + 1],
+#     dist = st_distance(geometry, lead, by_element = T) %>%
+#        units::set_units(mi),
+ # )
 ```
 ```{r}
-st_distance(prop_sales_sf$geometry,lihtc_sf$geometry, by_element = T) %>% head()
+st_distance(prop_sales_sf$geometry,properties_to_AH$geometry, by_element = T) %>% head()
 ```
 
 
