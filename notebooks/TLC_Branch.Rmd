@@ -64,5 +64,16 @@ LIHTC_2000 <- LIHTC %>%
   filter(YR_PIS >= 2000)
 head(LIHTC_2000)
 ```
+```{r LIHTC_2000 Dropped Columns}
+LITHC_2020_Clean <- LIHTC_2000 %>% 
+  transmute(HUD_ID, YR_PIS, LATITUDE, LONGITUDE, PROJECT)
+LITHC_2020_Clean
 
+#YOU NEED TO FILTER 8888.9999
+```
 
+```{r Barns Dropped Columns and renamed}
+Barnes_Clean <- barnes %>% 
+  transmute(HUD_ID, `Affordability Term Start Date`, lat, lng, `Development Name`)
+Barnes_Clean
+```
