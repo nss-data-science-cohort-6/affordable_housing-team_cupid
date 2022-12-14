@@ -67,6 +67,7 @@ lihtc2000_mod
 
 #### preparing the barnes data to be merged with the LIHTC so that it can be used for property analysis. (Note: we filled the missing property names in Barnes data using google serach and created the HUDID column in .csv before reading it). 
 #### fix the date format from mm/dd/yyyy to only yyyy and it is a character to make it numeric, change the column names and keep only the five coulms needed to row bind with lihtc2000_mod
+
 ```{r}
 barnes$'Affordability Term Start Date' <- str_sub(barnes$'Affordability Term Start Date', start=-4, end=-1) %>%
   as.numeric()
@@ -90,7 +91,7 @@ developments
 ```
 
 
-#### From 177 rows we are now down to 57 housing developments to compare with the property sales data.
+#### From 177 rows we are now down to 57 housing developments which becmes 65 upon ading the barnes data. This is ready to converted into sf-object.
 
 #### We are going to work on merging the property_sales to the filtered_sales.
 #### Filtered sales has some duplicate rows we will drop the duplicates using distinct() function and then do the inner_join to the property sales, to keep all the common rows we will use the 'apn' as the joining column and then we will convert the tibbles to sf objects, to find the distance from housing development.
@@ -103,16 +104,8 @@ sale_prop_details <- inner_join(dropdup_fs, property_details, by="apn")
 ```
 
 
-```{r}
-dropdup_fs <- filtered_sales %>%
-  distinct()
-
-sale_prop_details <- inner_join(dropdup_fs, property_details, by="apn")
-  
-```
-
-#### Convert the tibble into sf object for distance comparison and finding the nearest housing development to the property.
-
+#### Convert the tibbles the sale+property details and developemnts into sf object for distance comparison and finding the nearest housing development to the property.
+#### sf object needs the longitute and latitude column. That is used for craeting geometry. Geoemtry we will use for finding the distance from Low income housing (LIHTC).
 
 ```{r}
 dev_sf = st_as_sf(developments, coords = c("LONGITUDE", "LATITUDE"), 
@@ -125,12 +118,15 @@ prop_sales_sf = st_as_sf(sale_prop_details, coords = c('long', 'lat'),
 #### Now we have the sf objects we are going to compare the geometry columns across the data sets lihtc_sf and prop_sales_sf to find the nearest housing development and the distance from that to the property.
 
 ### We will find the property within 0.5 miles and 1 miles distance.
+### get the nearest proeprty in a vector called nearest
+### calcukate the distance from nearest into dist and convert meters into miles
+### column bind the two sf_objects prop_sales and the developemnts, and drop the geometry for prop_sales
+### Add the dist vector into the combined tibbles as column.
 
 
 ```{r}
 nearest <- st_nearest_feature(prop_sales_sf, dev_sf)
-nearest
-
+#nearest
 dist <- st_distance(prop_sales_sf, 
                     dev_sf[nearest,], by_element = TRUE) %>%
     units::set_units(mi)
@@ -147,6 +143,8 @@ properties_to_AH <- bind_cols(prop_sales_sf %>% st_drop_geometry(),
 #summary(properties_to_AH)
 ```
 
+#### create the distance coulmn as dist in the combine data set with the st_nearest_feature
+
 ```{r}
 properties_to_AH$dist = dist
 
@@ -154,42 +152,85 @@ properties_to_AH <- properties_to_AH %>%
   mutate(dist = as.numeric(dist))
 #properties_to_AH <- properties_to_AH$dist %>%
  # as.numeric()
-  #mutate(dist = as.numeric(dist))
+  
 ```
 
 
-```{r} 
-##this is giving zeros
-# properties_to_AH %>%
-#  
-#     mutate(
-#     lead = geometry[row_number() + 1],
-#     dist = st_distance(geometry, lead, by_element = T) %>%
-#        units::set_units(mi),
- # )
-```
+#### Filter and create the data set only to have the properties that are within one miles diameter of the low income housing developemnt using the dist column.
+
+
 ```{r}
-st_distance(prop_sales_sf$geometry,properties_to_AH$geometry, by_element = T) %>% head()
+prop_within_1mile <- properties_to_AH %>%
+  filter(dist <= 1)
+prop_within_1mile
+
 ```
 
+#### The ownerdate is a date object has the yyyy-mm-dd format so going to form the numeric column to have only yyyy so that we can find the number of years the property was sold with respect to when it was built and when the low income housing was released for service.
 
 
-```{r eval=FALSE, include=FALSE}
-pd_sf <- st_as_sf(property_details, coords = c("long", "lat"), 
-                 crs = 4326)
-head(pd_sf)
-
-lihtc_sf <- st_as_sf(LIHTC, coords = c("LONGITUDE", "LATITUDE"), CRS = 4326)
-head(lihtc_sf)
-```
 ```{r}
-dropdup_fs <- filtered_sales %>%
-  distinct()
+prop_within_1mile$ownerdate <- prop_within_1mile$ownerdate %>% 
+  format(format = "%Y") %>% 
+  as.numeric()
 
-%>%
-    units::set_units(mi)
+str(prop_within_1mile)
+summary(prop_within_1mile)
+```
+
+#### Going to create the difference coulmn substracting the sales date (owner_date) from the Housing development data put in service (YR_PIS). 
+#### using the diff (YR_PIS - ownerdate) and dist (distance from the housing development in mles) we will make the grouping for less than 5 miles and different years
+
+```{r}
+prop_within_1mile <- prop_within_1mile %>%
+  mutate (difference = (YR_PIS - ownerdate),
+          age = (ownerdate - year_built))
 
 
+prop_within_1mile <- prop_within_1mile %>%
+  mutate(group = 
+           case_when(
+             dist < 0.5 & difference >= 2 & difference <= 5 ~ "pre",
+             dist < 0.5 & difference >= 0 & difference <= 2 ~ "mid",
+             dist < 0.5 & difference < 0 ~ "post",
+             dist > 0.5 & difference >= 0 & difference <= 5 ~ "outside",
+             TRUE ~ "other"
+    )
+  )
+```
+
+#### drop the rows that are grouped as others upon the dist data and difference
+
+
+```{r}
+prop_within_1mile_of <- prop_within_1mile %>% 
+  filter(group != "other")
+```
+
+#### creating the Tpost column (homes within 0.5 miles of Developemnt, where sale occurred after the housing development was placed in service) for the statistical analysis and modeling. We also create a column for the Tall groups.
+
+```{r}
+prop_within_1mile_of <- prop_within_1mile_of %>%
+  mutate(Tall = (YR_PIS - ownerdate),
+         Tpost = if_else(group == "post", (ownerdate - YR_PIS), 0))
+```
+
+#### Filter to any property sold 5 years before development to 5 years after
+
+```{r}
+prop_sold_5yrs <- prop_within_1mile_of %>%
+  filter(difference >= -5 & difference <= 5)
+summary(prop_sold_5yrs)
+
+```
+
+### NOTE: we see that tract is numeric an land_area is character we want to change their character to do modeling.
+
+#### Running linaer regression models
+
+```{r}
+simple_regression_model <- lm(amount ~ square_footage +  age + group + ownerdate + tract, data = prop_sold_5yrs)
+summary(simple_regression_model)
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
