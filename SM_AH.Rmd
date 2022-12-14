@@ -220,8 +220,18 @@ prop_within_1mile_of <- prop_within_1mile_of %>%
 ```{r}
 prop_sold_5yrs <- prop_within_1mile_of %>%
   filter(difference >= -5 & difference <= 5)
-summary(prop_sold_5yrs)
+#summary(prop_sold_5yrs)
 
+# converted the land_areas into numeric and tract into character
+prop_sold_5yrs[c("land_area_acres", "acres")] <- str_split_fixed(prop_sold_5yrs$land_area,' ', 2)
+
+prop_sold_5yrs <- subset(prop_sold_5yrs, select = -c(acres) )
+prop_sold_5yrs$land_area_acres <- prop_sold_5yrs$land_area_acres%>%
+  as.numeric()
+
+prop_sold_5yrs$tract <- prop_sold_5yrs$tract%>%
+  as.character()
+str(prop_sold_5yrs)
 ```
 
 ### NOTE: we see that tract is numeric an land_area is character we want to change their character to do modeling.
@@ -229,7 +239,7 @@ summary(prop_sold_5yrs)
 #### Running linaer regression models
 
 ```{r}
-simple_regression_model <- lm(amount ~ square_footage +  age + group + ownerdate + tract, data = prop_sold_5yrs)
+simple_regression_model <- lm(amount ~ square_footage +  age + group + ownerdate + tract + land_area_acres, data = prop_sold_5yrs)
 summary(simple_regression_model)
 ```
 
