@@ -122,17 +122,35 @@ pd_within_mi_sales <- pd_within_mi_sales %>%
 
 #### Create a column "Tpost" that, for homes in the "post" group gives the number of years that the sale occurred after the housing development was placed in service
 ```{r}
-pd_within_mi_sales$Tpost <- pd_within_mi_sales %>%
-    filter(group != "post") %>% 
-    mutate(Tpost = (ownerdate - YR_PIS))
+pd_within_mi_sales <- pd_within_mi_sales %>%
+    mutate(Tpost = if_else(group == "post", (ownerdate - YR_PIS), 0))
+```
+
+#### Create a column for "age" of home when sold
+```{r}
+pd_within_mi_sales <- pd_within_mi_sales %>% 
+  mutate(age = (ownerdate - year_built))
+
+```
+
+#### Filter to any property sold 5 years before development to 5 years after
+```{r}
+pd_within_mi_sales <- pd_within_mi_sales %>% 
+  filter(difference >= -5 & difference <= 5)
 ```
 
 ```{r}
-pd_within_mi_sales$age <- pd_within_mi_sales %>% 
-  mutate(age = ())
+pd_within_mi_sales <- pd_within_mi_sales %>% 
+  filter(age >= 0)
 ```
 
 
+#### Then build a linear model with target variable the sales amount using property features
+```{r}
+simple_regression_model <- lm(amount ~ square_footage +  age + group + ownerdate + tract, data = pd_within_mi_sales)
+
+summary(simple_regression_model)
+```
 
 
 
