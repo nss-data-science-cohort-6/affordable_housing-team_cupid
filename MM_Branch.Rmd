@@ -153,6 +153,14 @@ summary(simple_regression_model)
 ```
 
 
+#### Create a model with target being the log of the sale price
+```{r}
+simple_regression_model_log <- lm(log(amount) ~ square_footage +  age + group + ownerdate + tract, data = pd_within_mi_sales)
+
+summary(simple_regression_model_log)
+```
+
+
 
 
 
