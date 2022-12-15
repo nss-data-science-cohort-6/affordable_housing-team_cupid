@@ -167,15 +167,39 @@ summary(simple_regression_model)
 
 #### Create a model with target being the log of the sale price
 ```{r}
-simple_regression_model_log <- lm(log(amount) ~ square_footage +  age + group + ownerdate + tract, data = prop_sold_5yrs)
+simple_regression_model_log <- lm(log(amount) ~ square_footage +  age + group + ownerdate + tract + land_area_acres, data = prop_sold_5yrs)
 
 summary(simple_regression_model_log)
 ```
 
 ```{r}
-
+prop_sold_5yrs %>% 
+  ggplot(aes(x = dist, y = amount)) + geom_point() + scale_y_log10() + facet_wrap(~ group)
 ```
 
+```{r}
+ggplot(prop_sold_5yrs, aes(x = amount)) + geom_histogram() + facet_wrap(~ group)
+```
+
+
+```{r}
+cor <- prop_sold_5yrs %>% 
+  select(where(is.numeric)) %>% 
+  st_drop_geometry(NULL) %>% 
+  cor(use = "complete.obs")
+
+cor
+```
+
+```{r}
+predict(simple_regression_model_log, newdata = prop_sold_5yrs)
+```
+
+
+```{r}
+predict(simple_regression_model_log, prop_sold_5yrs, interval = c("confidence"), level = 0.95) %>% 
+  head()
+```
 
 
 
