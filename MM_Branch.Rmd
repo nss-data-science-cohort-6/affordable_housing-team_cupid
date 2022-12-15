@@ -135,19 +135,31 @@ pd_within_mi_sales <- pd_within_mi_sales %>%
 
 #### Filter to any property sold 5 years before development to 5 years after
 ```{r}
-pd_within_mi_sales <- pd_within_mi_sales %>% 
+prop_sold_5yrs <- pd_within_mi_sales %>% 
   filter(difference >= -5 & difference <= 5)
 ```
 
+#### Filter any properties that sold prior to they were built (~3k properties)
 ```{r}
-pd_within_mi_sales <- pd_within_mi_sales %>% 
+prop_sold_5yrs <- prop_sold_5yrs %>% 
   filter(age >= 0)
 ```
 
+#### Convert land_areas into numeric and tract into character for better model fitting
+```{r}
+prop_sold_5yrs[c("land_area_acres", "acres")] <- str_split_fixed(prop_sold_5yrs$land_area,' ', 2)
+
+prop_sold_5yrs <- subset(prop_sold_5yrs, select = -c(acres) )
+prop_sold_5yrs$land_area_acres <- prop_sold_5yrs$land_area_acres%>%
+  as.numeric()
+
+prop_sold_5yrs$tract <- prop_sold_5yrs$tract%>%
+  as.character()
+```
 
 #### Then build a linear model with target variable the sales amount using property features
 ```{r}
-simple_regression_model <- lm(amount ~ square_footage +  age + group + ownerdate + tract, data = pd_within_mi_sales)
+simple_regression_model <- lm(amount ~ square_footage +  age + group + ownerdate + tract, data = prop_sold_5yrs)
 
 summary(simple_regression_model)
 ```
@@ -155,11 +167,14 @@ summary(simple_regression_model)
 
 #### Create a model with target being the log of the sale price
 ```{r}
-simple_regression_model_log <- lm(log(amount) ~ square_footage +  age + group + ownerdate + tract, data = pd_within_mi_sales)
+simple_regression_model_log <- lm(log(amount) ~ square_footage +  age + group + ownerdate + tract, data = prop_sold_5yrs)
 
 summary(simple_regression_model_log)
 ```
 
+```{r}
+
+```
 
 
 
