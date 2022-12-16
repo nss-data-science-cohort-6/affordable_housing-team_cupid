@@ -234,6 +234,7 @@ prop_sold_5yrs$tract <- prop_sold_5yrs$tract%>%
 str(prop_sold_5yrs)
 ```
 
+
 ### NOTE: we see that tract is numeric an land_area is character we want to change their character to do modeling.
 
 #### Running linaer regression models
@@ -241,6 +242,130 @@ str(prop_sold_5yrs)
 ```{r}
 simple_regression_model <- lm(amount ~ square_footage +  age + group + ownerdate + tract + land_area_acres, data = prop_sold_5yrs)
 summary(simple_regression_model)
+```
+```{r}
+simple_regression_model$coefficients
+```
+```{r}
+final_df_sf <- prop_sold_5yrs%>%
+  st_sf(sf_column_name = 'geometry')
+
+
+
+```
+
+
+
+
+```{r}
+
+# Read in road centerlines data from Rohit and try to plot the property and the low income housing on it to see where the LIHTC are concentarted and which properties are closer in 0.5 miles on map maybe plot the circle around them.
+roads <- st_read("./data/road_centerlines/road_centerlines.shp", as_tibble = T, quiet = T) %>%
+  st_transform('+proj=longlat +datum=WGS84')
+
+map <- leaflet() %>%
+  addProviderTiles(provider = "CartoDB.Positron") %>%
+  setView(lng = -86.7816, lat = 36.1627, zoom = 10) %>%
+  setMaxBounds(lng1 = -86.7816 + 1,
+               lat1 = 36.1627 + 1,
+               lng2 = -86.7816 - 1,
+               lat2 = 36.1627 - 1)
+
+# Visualize Metro Nashville properties sold 5 years pre and post LIHTC
+sf_circles <- st_buffer(dev_sf, dist = 804.5) #to create the polygon around a point
+
+map <- leaflet(options = leafletOptions(minZoom = 8)) %>%
+  addProviderTiles(provider = "CartoDB.Positron") %>%
+  setView(lng = -86.7816, lat = 36.1627, zoom = 12) %>%
+  setMaxBounds(lng1 = -86.7816 + 1, 
+               lat1 = 36.1627 + 1, 
+               lng2 = -86.7816 - 1, 
+               lat2 = 36.1627 - 1) %>%
+  addCircleMarkers(data = dev_sf, radius = 1)%>%
+  addPolygons(data = sf_circles)
+map
+
+
+
+```
+
+### Going to create a lat long from geometry to plot the prop_sold_5years can be ploted as map
+
+```{r}
+final_df_sf <- prop_sold_5yrs%>%
+  st_sf(sf_column_name = 'geometry')
+
+#sf_circles <- st_buffer(final_df_sf, dist = 804.5) #there is a dist column not sure if that is hurting it
+
+
+map <- leaflet(options = leafletOptions(minZoom = 8)) %>%
+  addProviderTiles(provider = "CartoDB.Positron") %>%
+  setView(lng = -86.7816, lat = 36.1627, zoom = 12) %>%
+  setMaxBounds(lng1 = -86.7816 + 1, 
+               lat1 = 36.1627 + 1, 
+               lng2 = -86.7816 - 1, 
+               lat2 = 36.1627 - 1) %>%
+  addCircleMarkers(data = final_df_sf, radius = 1)%>%
+  addPolygons(data = sf_circles)%>%
+  addCircleMarkers(data = prop_sales_sf,
+                   radius = 1,
+                   color = "white",
+                   weight = 0.25,
+                   fillColor = "red",
+                   fillOpacity = 0.75)
+map
+
+
+```
+
+
+
+```{r}
+# #library(tidyverse)
+# 
+# df <- df %>% 
+#   mutate(Geom = gsub('[()°]', '', Geom)) %>% 
+#   separate(col = Geom, into = c('Latitude', 'Longitude '), sep = '\\,')
+# 
+# leaflet() %>%
+#         addProviderTiles(provider = "Esri", options = providerTileOptions(maxZoom = 6)) %>%
+#         
+#         addCircleMarkers(
+#           data = filtered_df,
+#           radius = log10(filtered_df$number_of_speakers),
+#           opacity = .6,
+#           color = pal(filtered_df$endangerment_degree),
+#           lng = ~ Longitude,
+#           lat = ~ Latitude,
+#           popup = popup
+#         ) %>%
+#         addLegend(
+#           pal = pal,
+#           position = 'bottomleft',
+#           values = factor(filtered_df$endangerment_degree),
+#           title = 'Endangerment degrees'
+#         )
+#       
+#     })
+#     
+#   })
+
+
+```
+
+
+
+```{r}
+prop_sold_5yrs%>%
+  sample_n(1000)
+```
+
+```{r}
+prop_sold_5yrs%>%
+  summarise(n_distinct(PROJECT))
+
+developments%>%
+  summarise(n_distinct(PROJECT))
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
