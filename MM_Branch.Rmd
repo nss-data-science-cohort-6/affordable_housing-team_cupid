@@ -114,6 +114,18 @@ pd_within_mi_sales <- pd_within_mi_sales %>%
   )
 ```
 
+#### Add additional grouping "near" and "far" to segment groups
+```{r}
+pd_within_mi_sales <- pd_within_mi_sales %>%
+  mutate(prox = 
+           case_when(
+             group == "pre" | group == "mid" | group == "post" ~ "near",
+             group == "outside" ~ "far",
+             TRUE ~ "other"
+    )
+  )
+```
+
 #### Filter out all rows whose group is "other"
 ```{r}
 pd_within_mi_sales <- pd_within_mi_sales %>% 
@@ -159,7 +171,7 @@ prop_sold_5yrs$tract <- prop_sold_5yrs$tract%>%
 
 #### Then build a linear model with target variable the sales amount using property features
 ```{r}
-simple_regression_model <- lm(amount ~ square_footage +  age + group + ownerdate + tract, data = prop_sold_5yrs)
+simple_regression_model <- lm(amount ~ square_footage +  age + group + ownerdate + tract + land_area_acres, data = prop_sold_5yrs)
 
 summary(simple_regression_model)
 ```
@@ -201,5 +213,33 @@ predict(simple_regression_model_log, prop_sold_5yrs, interval = c("confidence"),
   head()
 ```
 
+```{r}
+prop_sold_5yrs %>% 
+  ggplot(aes(x = amount, y = square_footage, color = group)) + scale_x_log10() + scale_y_log10() + geom_point() + facet_wrap(~ group)
+```
+```{r}
+prop_sold_5yrs %>% 
+  ggplot(aes(x = age, y = amount, color = group)) + scale_y_log10() + geom_point() + facet_wrap(~ group)
+```
 
+```{r}
+prop_sold_5yrs %>% 
+  ggplot(aes(x = land_area_acres, y = amount, color = group)) + scale_x_log10() + scale_y_log10() + geom_point() + facet_wrap(~ group)
+```
+
+```{r}
+prop_sold_5yrs %>% 
+  ggplot(aes(y = amount, color = group)) + scale_y_log10() + geom_boxplot() + facet_wrap(~ prox)
+```
+
+```{r}
+prop_sold_5yrs %>%
+  ggplot(aes(
+    x = ownerdate, 
+    y = amount, 
+    color = group)) + scale_y_log10() + geom_point() + facet_wrap(~ prox)
+```
+```{r}
+saveRDS(prop_sold_5yrs, file = "prop_sold_5yrs.RData")
+```
 
