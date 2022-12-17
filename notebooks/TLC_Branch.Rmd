@@ -11,69 +11,188 @@ library(tidyverse)
 library(dplyr)
 library(readr)
 library(sf)
+library(stringr)
+library(data.table)
 ```
+
 
 ```{r}
 assessments <- read_csv("Data/assessments.csv")
-```
-
-```{r}
 barnes <- read_csv("Data/barnes.csv")
-```
-
-```{r}
 filtered_sales <- read_csv("Data/filtered_sales.csv")
-```
-
-```{r}
 full_sales <- read_csv("Data/full_sales.csv")
-```
-
-```{r}
-LIHTC <- read_csv("Data/LIHTC.csv")
-```
-
-```{r}
+LIHTC <- read_csv("Data/LIHTC_updated.csv")
 property_details <- read_csv("Data/property_details.csv")
 ```
-```{r}
-head(LIHTC)
-```
-
-```{r}
-head(barnes)
-```
-
-```{r}
-head(property_details)
-```
-
-```{r}
-head(filtered_sales)
-```
-
-```{r Join filtered_sales and property_details dataframe and drop duplicates}
-APNJoin <- inner_join(filtered_sales, property_details, by="apn") %>% 
-  distinct(apn,amount,ownerdate, .keep_all = TRUE)
-APNJoin
-```
-
+#### Filter LIHTC to Developements in service since 2000
+#### Remove invalid years from YR_PIS column
+#### Filter to include only valid columns
 
 ```{r}
 LIHTC_2000 <- LIHTC %>% 
-  filter(YR_PIS >= 2000)
-head(LIHTC_2000)
+  filter(YR_PIS >= 2000) %>% 
+  filter(YR_PIS != 8888, YR_PIS != 9999)
+LIHTC_2000_mod <- LIHTC_2000 %>% 
+  select(HUD_ID, PROJECT, YR_PIS, LATITUDE, LONGITUDE)
 ```
-```{r LIHTC_2000 Dropped Columns}
-LITHC_2020_Clean <- LIHTC_2000 %>% 
-  transmute(HUD_ID, YR_PIS, LATITUDE, LONGITUDE, PROJECT)
-LITHC_2020_Clean
+#### Filter Barnes Data to include 5 columns: HUD_ID, YR_PIS, lat, long, Project (name)
+#### Convert YR_PIS to numeric column
+#### Rename Columns to associated LIHTC column names
+```{r}
+barnes$'Affordability Term Start Date' <- str_sub(barnes$'Affordability Term Start Date', start=-4, end=-1) %>%
+  as.numeric()
+barnes_mod <- barnes[, c('HUD_ID', 'Development Name', 'Affordability Term Start Date', 'lat', 'lng')]
+colnames(barnes_mod) <- c('HUD_ID', 'PROJECT', 'YR_PIS', 'LATITUDE', 'LONGITUDE')
+```
+#### Join LIHTC_2000 and Barnes Data -- name = "developements"
 
-#YOU NEED TO FILTER 8888.9999
+```{r}
+developments <- rbind(LIHTC_2000_mod, barnes_mod)
 ```
 
-```{r Barns Dropped Columns and renamed}
-Barnes_Clean <- barnes %>% 
-  transmute(HUD_ID, `Affordability Term Start Date`, lat, lng, `Development Name`)
-Barnes_Clean
+#### Separate 'centroid' lat and long values in property_details
+#### Convert property_details to sf
+```{r}
+property_details$latlong <- stringr::str_extract(string = property_details$centroid, pattern = "(?<=\\().*(?=\\))")
+property_details[c('long', 'lat')] <- str_split_fixed(property_details$latlong,',', 2)
+pd_sf <- st_as_sf(property_details, coords = c("long", "lat"), crs = 4326)
 ```
+
+#### Convert developments into sf 
+```{r}
+developments_sf <- st_as_sf(developments, coords = c("LONGITUDE", "LATITUDE"), crs = 4326)
+```
+
+#### Get Nearest Development to Property -- assign to 'nearest'
+#### Get distance between developement and property -- assign to 'dist'
+#### bind the two together, including only HUD_ID, YR_PIS, Project
+#### add the distance column to get_nearest sf
+#### mutate to convert distance column to a numeric value
+```{r}
+nearest <- st_nearest_feature(pd_sf, developments_sf)
+dist <- st_distance(pd_sf, developments_sf[nearest,], by_element = TRUE) %>%
+    units::set_units(mi)
+get_nearest <- cbind(pd_sf, st_drop_geometry(developments_sf[nearest, c("HUD_ID", "YR_PIS", "PROJECT")]))
+get_nearest$dist = dist
+get_nearest <- get_nearest %>% 
+  mutate(dist = as.numeric(dist))
+```
+
+#### Filter the homes down to those that are within one mile of an affordable housing development.
+```{r}
+pd_within_mi <- get_nearest %>% 
+  filter(dist <= 1)
+```
+
+#### Combine filtered_sales to pd_within_mi to include sales price and year
+#### Keep necessary columns from combined sf dataset
+#### Create new column, called 'difference' to account for the difference in property purchase and the nearest developement year placed in service
+```{r}
+dropdup_fs <- filtered_sales %>%
+  distinct()
+pd_within_mi_sales <- inner_join(pd_within_mi, dropdup_fs, by = "apn", copy = FALSE, suffix = c(".pd_within_mi", ".dropdup_fs"))
+pd_within_mi_sales <- pd_within_mi_sales %>% 
+  select(apn, tract, year_built, amount, ownerdate, land_area, square_footage, story_height, building_condition, number_of_rooms, number_of_beds, number_of_baths, number_of_half_bath, number_of_fixtures, PROJECT, HUD_ID, dist, YR_PIS, geometry)
+pd_within_mi_sales$ownerdate <- pd_within_mi_sales$ownerdate %>% 
+  format(format = "%Y") %>% 
+  as.numeric()
+pd_within_mi_sales <- pd_within_mi_sales %>% 
+  mutate(difference = (YR_PIS - ownerdate))
+```
+
+#### calculate a new column called "group"
+```{r}
+pd_within_mi_sales <- pd_within_mi_sales %>%
+  mutate(group = 
+           case_when(
+             dist < 0.5 & difference >= 2 & difference <= 5 ~ "pre",
+             dist < 0.5 & difference >= 0 & difference < 2 ~ "mid",
+             dist < 0.5 & difference < 0 ~ "post",
+             dist > 0.5 & difference >= 0 & difference <= 5 ~ "outside",
+             TRUE ~ "other"
+    )
+  )
+```
+
+#### Filter out all rows whose group is "other"
+```{r}
+pd_within_mi_sales <- pd_within_mi_sales %>% 
+  filter(group != "other")
+```
+
+#### Create a column "Tpost" that, for homes in the "post" group gives the number of years that the sale occurred after the housing development was placed in service
+```{r}
+pd_within_mi_sales <- pd_within_mi_sales %>%
+    mutate(Tpost = if_else(group == "post", (ownerdate - YR_PIS), 0))
+```
+
+#### Create a column for "age" of home when sold
+```{r}
+pd_within_mi_sales <- pd_within_mi_sales %>% 
+  mutate(age = (ownerdate - year_built))
+```
+
+#### Filter to any property sold 5 years before development to 5 years after
+```{r}
+prop_sold_5yrs <- pd_within_mi_sales %>% 
+  filter(difference >= -5 & difference <= 5)
+```
+
+#### Filter any properties that sold prior to they were built (~3k properties)
+```{r}
+prop_sold_5yrs <- prop_sold_5yrs %>% 
+  filter(age >= 0)
+```
+
+#### Convert land_areas into numeric and tract into character for better model fitting
+```{r}
+prop_sold_5yrs[c("land_area_acres", "acres")] <- str_split_fixed(prop_sold_5yrs$land_area,' ', 2)
+prop_sold_5yrs <- subset(prop_sold_5yrs, select = -c(acres) )
+prop_sold_5yrs$land_area_acres <- prop_sold_5yrs$land_area_acres%>%
+  as.numeric()
+prop_sold_5yrs$tract <- prop_sold_5yrs$tract%>%
+  as.character()
+```
+
+#### Then build a linear model with target variable the sales amount using property features
+```{r}
+simple_regression_model <- lm(amount ~ square_footage +  age + group + ownerdate + tract, data = prop_sold_5yrs)
+summary(simple_regression_model)
+```
+
+
+#### Create a model with target being the log of the sale price
+```{r Regression releveld for group}
+simple_regression_model_log <- lm(log(amount) ~ square_footage +  age + relevel(factor(group), ref = 'outside') + ownerdate + tract + land_area_acres, data = prop_sold_5yrs)
+summary(simple_regression_model_log)
+```
+
+```{r Standard error in the estimated difference}
+Std_err <- sqrt(2*(vcov(simple_regression_model_log)['relevel(factor(group), ref = "outside")post', 'relevel(factor(group), ref = "outside")pre'  ]) +
+  vcov(simple_regression_model_log)['relevel(factor(group), ref = "outside")post', 'relevel(factor(group), ref = "outside")post'  ] +
+vcov(simple_regression_model_log)['relevel(factor(group), ref = "outside")pre', 'relevel(factor(group), ref = "outside")pre'])
+Std_err
+```
+
+```{r Point estimate}
+point_est <- simple_regression_model_log$coefficients['relevel(factor(group), ref = "outside")post']-
+  simple_regression_model_log$coefficients['relevel(factor(group), ref = "outside")pre']
+point_est
+```
+
+```{r confidence interval for difference in coefficients (how uncertain our estimate is)}
+lower_bound <- point_est-(1.96*Std_err)
+upper_bound <- point_est+(1.96*Std_err)
+lower_bound
+upper_bound
+```
+
+```{r Lower bound percentage}
+exp(lower_bound)-1
+```
+
+```{r Upper bound percentage}
+exp(upper_bound)-1
+```
+
+
