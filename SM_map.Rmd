@@ -1,0 +1,117 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+#load the library
+library(sf)
+library(leaflet)
+library(htmltools)
+library(scales)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(tibble)
+```
+
+#Read the .rds objects
+```{r}
+dev <- readRDS("dev_sf.rds")
+prop_near_dev <- readRDS("final_df_sf.rds")
+roads <- readRDS("roads.rds")
+```
+
+#Make the label to see on the map interactive
+
+```{r}
+# Create tooltip labels for circle markers
+dev$label <- 
+  paste0("<b>Name:</b> ", dev$PROJECT, "<br>",
+         "<b>Year Put in service:</b> ", dev$YR_PIS, "<br>", 
+         "<b>HuD_ID:</b> ", dev$HUD_ID, "<br>")%>%
+  lapply(htmltools::HTML)
+
+```
+
+```{r}
+#to create the polygon around a point in the dev points with radius of 0.5 miles to mark the 0.5 mile around the property
+sf_circles <- st_buffer(dev, dist = 804.5)
+
+```
+
+```{r}
+#draw the leaflet map and put the circe and the tooltip for labels
+# Add tooltip labels to traffic accidents
+map <- leaflet(options = leafletOptions(minZoom = 6)) %>%
+  addProviderTiles(provider = "CartoDB.Positron") %>%
+  setView(lng = -86.7816, lat = 36.1627, zoom = 10) %>%
+  setMaxBounds(lng1 = -86.7816 + 1, 
+               lat1 = 36.1627 + 1, 
+               lng2 = -86.7816 - 1, 
+               lat2 = 36.1627 - 1) %>%
+  addPolylines(data = roads, 
+               color = "lightgrey", 
+               opacity = 0.8, 
+               weight = 1.5, 
+               label = ~RTE_NME)%>%
+  addCircleMarkers(data = dev,
+                   radius = 1,
+                   color = "white",
+                   weight = 0.25,
+                   fillColor = "red",
+                   fillOpacity = 0.75,
+                   label = ~PROJECT)%>%
+  addPolygons(data = sf_circles, 
+              weight = 1, 
+              opacity = 0.5)
+map
+```
+
+```{r}
+#draw the leaflet map and put the circe and the tooltip for labels
+# Add tooltip labels to traffic accidents
+map <- leaflet(options = leafletOptions(minZoom = 6)) %>%
+  addProviderTiles(provider = "CartoDB.Positron") %>%
+  setView(lng = -86.7816, lat = 36.1627, zoom = 10) %>%
+  setMaxBounds(lng1 = -86.7816 + 1, 
+               lat1 = 36.1627 + 1, 
+               lng2 = -86.7816 - 1, 
+               lat2 = 36.1627 - 1) %>%
+  addPolylines(data = roads, 
+               color = "lightgrey", 
+               opacity = 0.8, 
+               weight = 1.5, 
+               label = ~RTE_NME)%>%
+    addCircleMarkers(data = dev,
+                   radius = 1,
+                   color = "white",
+                   weight = 0.25,
+                   fillColor = "red",
+                   fillOpacity = 0.75,
+                   label = ~PROJECT)%>%
+  addPolygons(data = sf_circles, 
+              weight = 1, 
+              opacity = 0.5)%>%
+  addCircleMarkers(data = prop_near_dev,
+                   radius = 1,
+                   color = "white",
+                   weight = 0.25,
+                   fillColor = "green",
+                   fillOpacity = 0.75,
+                   label = ~ownerdate)
+
+map
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
